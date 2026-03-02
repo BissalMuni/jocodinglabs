@@ -1,4 +1,5 @@
 const JOCODING_SEARCH_URL = 'https://www.youtube.com/@jocoding/search?query=AI%EB%89%B4%EC%8A%A4';
+const YOUTUBE_BROWSE_URL = 'https://www.youtube.com/youtubei/v1/search';
 
 export interface ChannelVideo {
   videoId: string;
@@ -12,10 +13,19 @@ const FETCH_HEADERS = {
   'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
 };
 
+const INNERTUBE_CLIENT = {
+  clientName: 'WEB',
+  clientVersion: '2.20240101.00.00',
+  hl: 'ko',
+  gl: 'KR',
+};
+
+// Max continuation pages to fetch (prevent infinite loops)
+const MAX_CONTINUATION_PAGES = 5;
+
 /**
  * Scrape 조코딩 YouTube channel search results for AI뉴스 videos.
- * Uses the channel's /search?query=AI뉴스 page to find all matching videos,
- * not just the ones visible on the main /videos page.
+ * Fetches the initial page + continuation pages to collect all matching videos.
  */
 export async function scrapeAINewsVideos(): Promise<ChannelVideo[]> {
   const res = await fetch(JOCODING_SEARCH_URL, { headers: FETCH_HEADERS });
@@ -28,18 +38,25 @@ export async function scrapeAINewsVideos(): Promise<ChannelVideo[]> {
   const videos: ChannelVideo[] = [];
   const seen = new Set<string>();
 
+  // Extract API key for continuation requests
+  const apiKeyMatch = html.match(/"INNERTUBE_API_KEY"\s*:\s*"([^"]+)"/);
+  const apiKey = apiKeyMatch?.[1] ?? '';
+
   // Extract from ytInitialData JSON embedded in the page
   const dataMatch = html.match(/var ytInitialData\s*=\s*({[\s\S]+?});\s*<\/script>/);
+  let continuationToken: string | null = null;
+
   if (dataMatch) {
     try {
       const data = JSON.parse(dataMatch[1]);
       extractVideosFromData(data, videos, seen);
+      continuationToken = extractContinuationToken(data);
     } catch {
       // Fall through to regex approach
     }
   }
 
-  // Fallback: regex-based extraction
+  // Fallback: regex-based extraction (initial page only)
   if (videos.length === 0) {
     const pattern = /"videoRenderer":\{"videoId":"([a-zA-Z0-9_-]{11})"[\s\S]*?"title":\{"runs":\[\{"text":"([^"]+)"\}/g;
     let match;
@@ -53,7 +70,100 @@ export async function scrapeAINewsVideos(): Promise<ChannelVideo[]> {
     }
   }
 
+  // Fetch continuation pages for more results
+  if (apiKey && continuationToken) {
+    for (let page = 0; page < MAX_CONTINUATION_PAGES; page++) {
+      try {
+        const contResult = await fetchContinuation(apiKey, continuationToken);
+        if (!contResult) break;
+
+        const prevCount = videos.length;
+        extractVideosFromData(contResult.data, videos, seen);
+
+        // No new videos found — stop
+        if (videos.length === prevCount) break;
+
+        continuationToken = contResult.nextToken;
+        if (!continuationToken) break;
+      } catch {
+        break;
+      }
+    }
+  }
+
   return videos;
+}
+
+/**
+ * Fetch a continuation page from YouTube's internal API.
+ */
+async function fetchContinuation(
+  apiKey: string,
+  continuationToken: string,
+): Promise<{ data: unknown; nextToken: string | null } | null> {
+  const url = `${YOUTUBE_BROWSE_URL}?key=${apiKey}`;
+  const body = {
+    context: { client: INNERTUBE_CLIENT },
+    continuation: continuationToken,
+  };
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      ...FETCH_HEADERS,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) return null;
+
+  const data = await res.json();
+  const nextToken = extractContinuationToken(data);
+  return { data, nextToken };
+}
+
+/**
+ * Recursively search for continuation token in YouTube data.
+ */
+function extractContinuationToken(obj: unknown): string | null {
+  if (!obj || typeof obj !== 'object') return null;
+
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      const token = extractContinuationToken(item);
+      if (token) return token;
+    }
+    return null;
+  }
+
+  const record = obj as Record<string, unknown>;
+
+  // Look for continuationEndpoint or continuationCommand
+  const contRenderer = record['continuationItemRenderer'] as Record<string, unknown> | undefined;
+  if (contRenderer) {
+    const endpoint = contRenderer['continuationEndpoint'] as Record<string, unknown> | undefined;
+    const command = endpoint?.['continuationCommand'] as Record<string, unknown> | undefined;
+    if (command && typeof command['token'] === 'string') {
+      return command['token'] as string;
+    }
+  }
+
+  // Also check for nextContinuationData pattern
+  const nextCont = record['nextContinuationData'] as Record<string, unknown> | undefined;
+  if (nextCont && typeof nextCont['continuation'] === 'string') {
+    return nextCont['continuation'] as string;
+  }
+
+  // Recurse into values
+  for (const value of Object.values(record)) {
+    if (typeof value === 'object' && value !== null) {
+      const token = extractContinuationToken(value);
+      if (token) return token;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -148,8 +258,9 @@ function extractVideosFromData(
     }
   }
 
-  // Recurse into all values
-  for (const value of Object.values(record)) {
+  // Recurse into all values (skip continuationItemRenderer to avoid noise)
+  for (const [key, value] of Object.entries(record)) {
+    if (key === 'continuationItemRenderer') continue;
     if (typeof value === 'object' && value !== null) {
       extractVideosFromData(value, videos, seen);
     }
