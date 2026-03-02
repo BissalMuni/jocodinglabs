@@ -4,7 +4,23 @@
       "WebFetch(domain:github.com)",
       "Bash(spec-kit:*)",
       "Bash(npx @spec-kit/cli:*)",
-      "Bash(where:*)"
+      "Bash(where:*)",
+      "Bash(gh repo create jocodinglabs --public --source=. --push)",
+      "Bash(gh --version)",
+      "Bash(git fetch --all --prune)",
+      "Bash(ls -d specs/[0-9]*-ai-tech-tracker)",
+      "Bash(powershell -ExecutionPolicy Bypass -File .specify/scripts/powershell/create-new-feature.ps1 -Json -ShortName \"ai-tech-tracker\" -Number 1 \"YouTube AI news tech tracker website\")",
+      "Bash(powershell -ExecutionPolicy Bypass -File .specify/scripts/powershell/check-prerequisites.ps1 -Json -PathsOnly)",
+      "Bash(powershell -ExecutionPolicy Bypass -File .specify/scripts/powershell/setup-plan.ps1 -Json)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:scrapecreators.com)",
+      "Bash(powershell -ExecutionPolicy Bypass -File .specify/scripts/powershell/update-agent-context.ps1 -AgentType claude)",
+      "Bash(powershell -ExecutionPolicy Bypass -File .specify/scripts/powershell/check-prerequisites.ps1 -Json)",
+      "Bash(.specify/scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks)",
+      "Bash(powershell.exe -File .specify/scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks)",
+      "Bash(docker build -t claude-sandbox -f Dockerfile.claude .)",
+      "Bash(docker inspect 87ec69f720d5 --format '{{json .NetworkSettings.Ports}}' 2>/dev/null | python3 -m json.tool 2>/dev/null || echo \"Container not accessible from inside\")",
+      "Bash(docker port 87ec69f720d5 2>/dev/null || echo \"Cannot access docker from this container\")"
     ]
   }
 }
