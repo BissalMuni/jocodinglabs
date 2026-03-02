@@ -36,28 +36,35 @@ interface VideoGroupSectionProps {
 
 export default function VideoGroupSection({ video, items }: VideoGroupSectionProps) {
   return (
-    <section className="space-y-3">
-      <div className="flex items-center gap-3 border-b border-gray-200 pb-2">
-        <a
-          href={video.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 text-base font-semibold text-gray-900 hover:text-red-600 hover:underline"
-        >
-          <svg className="h-5 w-5 shrink-0 text-red-600" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814z" />
-            <path d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" fill="white" />
-          </svg>
-          {video.title}
-        </a>
-        {video.publishedAt && (
-          <span className="shrink-0 text-sm text-gray-500">{video.publishedAt}</span>
-        )}
-        <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">
-          {items.length}개 기술
-        </span>
+    <section>
+      <div className="mb-4 rounded-xl bg-gradient-to-r from-gray-900 to-gray-800 px-5 py-4">
+        <div className="flex items-start justify-between gap-3">
+          <a
+            href={video.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group inline-flex items-start gap-3 text-white"
+          >
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-red-600 transition-transform group-hover:scale-110">
+              <svg className="h-4 w-4 text-white" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+              </svg>
+            </span>
+            <div>
+              <span className="text-base font-semibold leading-snug group-hover:underline">
+                {video.title}
+              </span>
+              <div className="mt-1 flex items-center gap-2 text-xs text-gray-400">
+                {video.publishedAt && <span>{video.publishedAt}</span>}
+                <span className="rounded-full bg-white/10 px-2 py-0.5">
+                  {items.length}개 기술 소개
+                </span>
+              </div>
+            </div>
+          </a>
+        </div>
       </div>
-      <div className="space-y-3 pl-2">
+      <div className="grid gap-3 sm:grid-cols-2">
         {items.map((item) => (
           <TechCard key={item.id} item={item} />
         ))}

@@ -26,10 +26,10 @@ export default function CategoryFilter({ categories, selectedCategory, onSelect 
     <div className="flex flex-wrap gap-2">
       <button
         onClick={() => handleClick(null)}
-        className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+        className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 ${
           selectedCategory === null
-            ? 'bg-blue-600 text-white'
-            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            ? 'bg-gray-900 text-white shadow-sm'
+            : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50 hover:text-gray-900'
         }`}
       >
         전체
@@ -38,10 +38,10 @@ export default function CategoryFilter({ categories, selectedCategory, onSelect 
         <button
           key={cat.id}
           onClick={() => handleClick(cat.id)}
-          className={`rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+          className={`rounded-full px-3.5 py-1.5 text-sm font-medium transition-all duration-150 ${
             selectedCategory === cat.id
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              ? 'bg-gray-900 text-white shadow-sm'
+              : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50 hover:text-gray-900'
           }`}
         >
           {cat.name}
