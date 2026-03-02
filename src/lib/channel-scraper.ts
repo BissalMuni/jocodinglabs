@@ -56,6 +56,36 @@ export async function scrapeAINewsVideos(): Promise<ChannelVideo[]> {
   return videos;
 }
 
+/**
+ * Fetch the actual upload date of a YouTube video by scraping its page.
+ * Returns ISO date string (e.g. "2025-01-15") or null if not found.
+ */
+export async function fetchVideoUploadDate(videoId: string): Promise<string | null> {
+  try {
+    const url = `https://www.youtube.com/watch?v=${videoId}`;
+    const res = await fetch(url, { headers: FETCH_HEADERS });
+    if (!res.ok) return null;
+
+    const html = await res.text();
+
+    // Try JSON-LD: "uploadDate":"2025-01-15" or "datePublished":"2025-01-15"
+    const uploadMatch = html.match(/"(?:uploadDate|datePublished)"\s*:\s*"(\d{4}-\d{2}-\d{2})"/);
+    if (uploadMatch) return uploadMatch[1];
+
+    // Try meta tag: <meta itemprop="datePublished" content="2025-01-15">
+    const metaMatch = html.match(/<meta\s+itemprop="datePublished"\s+content="(\d{4}-\d{2}-\d{2})"/);
+    if (metaMatch) return metaMatch[1];
+
+    // Try publishDate in ytInitialPlayerResponse
+    const publishMatch = html.match(/"publishDate"\s*:\s*"(\d{4}-\d{2}-\d{2})"/);
+    if (publishMatch) return publishMatch[1];
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 function isAINewsTitle(title: string): boolean {
   return title.includes('AI뉴스') || title.includes('AI 뉴스');
 }

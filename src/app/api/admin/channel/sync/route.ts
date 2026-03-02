@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { sourceVideos } from '@/db/schema';
 import { verifyAdmin } from '@/lib/admin-auth';
-import { scrapeAINewsVideos } from '@/lib/channel-scraper';
+import { scrapeAINewsVideos, fetchVideoUploadDate } from '@/lib/channel-scraper';
 
 export async function POST(request: NextRequest) {
   const authError = verifyAdmin(request);
@@ -23,28 +23,33 @@ export async function POST(request: NextRequest) {
     const existingVideos = await db.select({ url: sourceVideos.url }).from(sourceVideos);
     const existingUrls = new Set(existingVideos.map((v) => v.url));
 
-    const newVideos: Array<{ videoId: string; title: string; url: string; publishedAt?: string }> = [];
+    const newVideos: Array<{ videoId: string; title: string; url: string; publishedAt: string }> = [];
 
     for (const video of channelVideos) {
       const url = `https://www.youtube.com/watch?v=${video.videoId}`;
       if (!existingUrls.has(url)) {
-        newVideos.push({ ...video, url });
+        // Fetch actual upload date from YouTube video page
+        const uploadDate = await fetchVideoUploadDate(video.videoId);
+        newVideos.push({
+          ...video,
+          url,
+          publishedAt: uploadDate || '',
+        });
       }
     }
 
     // Insert new videos
-    const now = new Date().toISOString().split('T')[0];
     for (const video of newVideos) {
       await db.insert(sourceVideos).values({
         url: video.url,
         title: video.title,
-        published_at: video.publishedAt || now,
+        published_at: video.publishedAt,
         analyzed: 0,
       });
     }
 
     return NextResponse.json({
-      newVideos: newVideos.map((v) => ({ title: v.title, url: v.url })),
+      newVideos: newVideos.map((v) => ({ title: v.title, url: v.url, publishedAt: v.publishedAt })),
       newCount: newVideos.length,
       existingCount: channelVideos.length - newVideos.length,
       totalFound: channelVideos.length,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/db/client';
 import { sourceVideos, techItems, techItemVideos, categories } from '@/db/schema';
 import { eq } from 'drizzle-orm';
-import { scrapeAINewsVideos } from '@/lib/channel-scraper';
+import { scrapeAINewsVideos, fetchVideoUploadDate } from '@/lib/channel-scraper';
 import { extractTranscript } from '@/lib/transcript';
 import { analyzeTranscript } from '@/lib/analyzer';
 
@@ -23,15 +23,15 @@ export async function GET(request: NextRequest) {
     const existingUrls = new Set(existingVideos.map((v) => v.url));
 
     const newVideos: Array<{ title: string; url: string }> = [];
-    const now = new Date().toISOString().split('T')[0];
 
     for (const video of channelVideos) {
       const url = `https://www.youtube.com/watch?v=${video.videoId}`;
       if (!existingUrls.has(url)) {
+        const uploadDate = await fetchVideoUploadDate(video.videoId);
         await db.insert(sourceVideos).values({
           url,
           title: video.title,
-          published_at: video.publishedAt || now,
+          published_at: uploadDate || '',
           analyzed: 0,
         });
         newVideos.push({ title: video.title, url });
@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
               description: item.description,
               url: item.url || null,
               category_id: categoryId,
-              introduced_at: video.published_at || now,
+              introduced_at: video.published_at || new Date().toISOString().split('T')[0],
             })
             .returning();
 
