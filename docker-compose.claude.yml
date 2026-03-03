@@ -1,0 +1,17 @@
+services:
+  claude:
+    build:
+      context: .
+      dockerfile: Dockerfile.claude
+    volumes:
+      - .:/workspace
+      - claude_modules:/workspace/node_modules
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true
+
+volumes:
+  claude_modules:
