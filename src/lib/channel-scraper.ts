@@ -1,5 +1,5 @@
-const JOCODING_SEARCH_URL = 'https://www.youtube.com/@jocoding/search?query=AI%EB%89%B4%EC%8A%A4';
-const YOUTUBE_BROWSE_URL = 'https://www.youtube.com/youtubei/v1/search';
+const JOCODING_VIDEOS_URL = 'https://www.youtube.com/@jocoding/videos';
+const YOUTUBE_BROWSE_URL = 'https://www.youtube.com/youtubei/v1/browse';
 
 export interface ChannelVideo {
   videoId: string;
@@ -20,15 +20,68 @@ const INNERTUBE_CLIENT = {
   gl: 'KR',
 };
 
-// Max continuation pages to fetch (prevent infinite loops)
-const MAX_CONTINUATION_PAGES = 5;
+// Max continuation pages to fetch (videos tab has more content)
+const MAX_CONTINUATION_PAGES = 20;
+
+// Only fetch videos from the last N months
+const DATE_CUTOFF_MONTHS = 6;
 
 /**
- * Scrape 조코딩 YouTube channel search results for AI뉴스 videos.
- * Fetches the initial page + continuation pages to collect all matching videos.
+ * Parse Korean/English relative date text and check if within cutoff months.
+ * Returns true if the date is within the cutoff or if parsing fails (conservative).
+ */
+export function isWithinDateCutoff(publishedTimeText: string, monthsCutoff: number): boolean {
+  if (!publishedTimeText) return true;
+
+  // Strip common prefixes like "Streamed " or "최초 공개: "
+  const cleaned = publishedTimeText.replace(/^(Streamed\s+|최초\s*공개:\s*)/i, '');
+
+  // Korean patterns: "3개월 전", "1년 전", "2주 전", "3일 전", "5시간 전"
+  const koMatch = cleaned.match(/(\d+)\s*(년|개월|주|일|시간|분|초)\s*전/);
+  if (koMatch) {
+    const num = parseInt(koMatch[1], 10);
+    const unit = koMatch[2];
+    const months = toMonths(num, unit);
+    return months <= monthsCutoff;
+  }
+
+  // English patterns: "3 months ago", "1 year ago", "2 weeks ago"
+  const enMatch = cleaned.match(/(\d+)\s*(year|month|week|day|hour|minute|second)s?\s*ago/i);
+  if (enMatch) {
+    const num = parseInt(enMatch[1], 10);
+    const unit = enMatch[2].toLowerCase();
+    const unitMap: Record<string, string> = {
+      year: '년', month: '개월', week: '주', day: '일',
+      hour: '시간', minute: '분', second: '초',
+    };
+    const months = toMonths(num, unitMap[unit] ?? '개월');
+    return months <= monthsCutoff;
+  }
+
+  // Can't parse — include conservatively
+  return true;
+}
+
+function toMonths(num: number, unit: string): number {
+  switch (unit) {
+    case '년': return num * 12;
+    case '개월': return num;
+    case '주': return num / 4;
+    case '일': return num / 30;
+    case '시간': return num / (30 * 24);
+    case '분': return num / (30 * 24 * 60);
+    case '초': return num / (30 * 24 * 60 * 60);
+    default: return 0;
+  }
+}
+
+/**
+ * Scrape 조코딩 YouTube channel videos tab for AI뉴스 videos.
+ * Uses the videos tab instead of search for broader coverage,
+ * with a date cutoff to limit to recent content.
  */
 export async function scrapeAINewsVideos(): Promise<ChannelVideo[]> {
-  const res = await fetch(JOCODING_SEARCH_URL, { headers: FETCH_HEADERS });
+  const res = await fetch(JOCODING_VIDEOS_URL, { headers: FETCH_HEADERS });
 
   if (!res.ok) {
     throw new Error(`채널 페이지 요청 실패: ${res.status}`);
@@ -72,16 +125,18 @@ export async function scrapeAINewsVideos(): Promise<ChannelVideo[]> {
 
   // Fetch continuation pages for more results
   if (apiKey && continuationToken) {
+    let reachedCutoff = false;
     for (let page = 0; page < MAX_CONTINUATION_PAGES; page++) {
+      if (reachedCutoff) break;
       try {
         const contResult = await fetchContinuation(apiKey, continuationToken);
         if (!contResult) break;
 
         const prevCount = videos.length;
-        extractVideosFromData(contResult.data, videos, seen);
+        reachedCutoff = extractVideosFromData(contResult.data, videos, seen);
 
         // No new videos found — stop
-        if (videos.length === prevCount) break;
+        if (videos.length === prevCount && !reachedCutoff) break;
 
         continuationToken = contResult.nextToken;
         if (!continuationToken) break;
@@ -196,27 +251,32 @@ export async function fetchVideoUploadDate(videoId: string): Promise<string | nu
   }
 }
 
-function isAINewsTitle(title: string): boolean {
+export function isAINewsTitle(title: string): boolean {
   return title.includes('AI뉴스') || title.includes('AI 뉴스');
 }
 
-function extractVideosFromData(
+/**
+ * Recursively extract video data from YouTube's data structure.
+ * Returns true if a video beyond the date cutoff was encountered (signals to stop pagination).
+ */
+export function extractVideosFromData(
   obj: unknown,
   videos: ChannelVideo[],
   seen: Set<string>,
-): void {
-  if (!obj || typeof obj !== 'object') return;
+): boolean {
+  if (!obj || typeof obj !== 'object') return false;
 
   if (Array.isArray(obj)) {
     for (const item of obj) {
-      extractVideosFromData(item, videos, seen);
+      const pastCutoff = extractVideosFromData(item, videos, seen);
+      if (pastCutoff) return true;
     }
-    return;
+    return false;
   }
 
   const record = obj as Record<string, unknown>;
 
-  // Look for videoRenderer (search results use this pattern)
+  // Look for videoRenderer (videos tab uses richItemRenderer > videoRenderer)
   const renderer =
     (record['videoRenderer'] as Record<string, unknown>) ??
     (record['gridVideoRenderer'] as Record<string, unknown>) ??
@@ -243,16 +303,20 @@ function extractVideosFromData(
         }
       }
 
+      // Extract publishedTimeText (relative time like "1년 전", "3개월 전")
+      const publishedObj = innerRenderer['publishedTimeText'] as Record<string, unknown> | undefined;
+      let publishedAt: string | undefined;
+      if (publishedObj && typeof publishedObj['simpleText'] === 'string') {
+        publishedAt = publishedObj['simpleText'] as string;
+      }
+
+      // Check date cutoff — if past cutoff, signal to stop pagination
+      if (publishedAt && !isWithinDateCutoff(publishedAt, DATE_CUTOFF_MONTHS)) {
+        return true;
+      }
+
       if (title && !seen.has(videoId) && isAINewsTitle(title)) {
         seen.add(videoId);
-
-        // Extract publishedTimeText (relative time like "1년 전", "3개월 전")
-        const publishedObj = innerRenderer['publishedTimeText'] as Record<string, unknown> | undefined;
-        let publishedAt: string | undefined;
-        if (publishedObj && typeof publishedObj['simpleText'] === 'string') {
-          publishedAt = publishedObj['simpleText'] as string;
-        }
-
         videos.push({ videoId, title, publishedAt });
       }
     }
@@ -262,7 +326,10 @@ function extractVideosFromData(
   for (const [key, value] of Object.entries(record)) {
     if (key === 'continuationItemRenderer') continue;
     if (typeof value === 'object' && value !== null) {
-      extractVideosFromData(value, videos, seen);
+      const pastCutoff = extractVideosFromData(value, videos, seen);
+      if (pastCutoff) return true;
     }
   }
+
+  return false;
 }

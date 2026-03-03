@@ -48,6 +48,7 @@ export async function GET(request: NextRequest) {
             sourceVideo: true,
           },
         },
+        screenshot: true,
       },
     });
 
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
         title: pivot.sourceVideo.title,
         publishedAt: pivot.sourceVideo.published_at,
       })),
+      screenshotUrl: item.screenshot?.status === 'completed' ? item.screenshot.blob_url : null,
       createdAt: item.created_at,
     }));
 

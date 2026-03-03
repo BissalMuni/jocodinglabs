@@ -21,6 +21,7 @@ interface TechItem {
   category: Category | null;
   introducedAt: string;
   sourceVideos: SourceVideo[];
+  screenshotUrl?: string | null;
   createdAt: string;
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
 import PracticeTracker from './practice-tracker';
+import ScreenshotThumbnail from './screenshot-thumbnail';
 
 interface SourceVideo {
   id: number;
@@ -21,6 +22,7 @@ interface TechItemData {
   category: Category | null;
   introducedAt: string;
   sourceVideos: SourceVideo[];
+  screenshotUrl?: string | null;
   createdAt: string;
 }
 
@@ -89,6 +91,13 @@ export default function TechCard({ item }: TechCardProps) {
         )}
       </div>
       <p className="mt-1.5 text-sm leading-relaxed text-gray-600 line-clamp-2">{item.description}</p>
+      {item.screenshotUrl && item.url && (
+        <ScreenshotThumbnail
+          screenshotUrl={item.screenshotUrl}
+          targetUrl={item.url}
+          name={item.name}
+        />
+      )}
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-gray-400">
         {item.sourceVideos.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
