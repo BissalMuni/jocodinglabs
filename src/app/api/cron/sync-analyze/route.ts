@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { scrapeAINewsVideos, fetchVideoUploadDate } from '@/lib/channel-scraper';
 import { extractTranscript } from '@/lib/transcript';
 import { analyzeTranscript } from '@/lib/analyzer';
+import { fetchVideoDescription, parseTimestamps, formatTimestampsForAnalysis } from '@/lib/video-description';
 
 export async function GET(request: NextRequest) {
   // Verify cron secret
@@ -60,8 +61,14 @@ export async function GET(request: NextRequest) {
     for (const video of unanalyzed) {
       try {
         const transcript = await extractTranscript(video.url);
+
+        // Fetch description and parse timestamps
+        const description = await fetchVideoDescription(video.url);
+        const timestamps = description ? parseTimestamps(description) : [];
+        const tocText = formatTimestampsForAnalysis(timestamps);
+
         const existingCategoryNames = Array.from(categoryMap.keys());
-        const analysis = await analyzeTranscript(transcript, video.url, existingCategoryNames);
+        const analysis = await analyzeTranscript(transcript, video.url, existingCategoryNames, tocText || null);
 
         if (analysis.videoTitle) {
           await db

@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { extractTranscript } from '@/lib/transcript';
 import { analyzeTranscript } from '@/lib/analyzer';
+import { fetchVideoDescription, parseTimestamps, formatTimestampsForAnalysis } from '@/lib/video-description';
 import type { ExtractionResult } from '@/types';
 
 export async function POST(request: NextRequest) {
@@ -43,7 +44,13 @@ export async function POST(request: NextRequest) {
     for (const videoUrl of videoUrls) {
       try {
         const transcript = await extractTranscript(videoUrl);
-        const analysis = await analyzeTranscript(transcript, videoUrl, existingCategoryNames);
+
+        // Fetch description and parse timestamps for better analysis
+        const description = await fetchVideoDescription(videoUrl);
+        const timestamps = description ? parseTimestamps(description) : [];
+        const tocText = formatTimestampsForAnalysis(timestamps);
+
+        const analysis = await analyzeTranscript(transcript, videoUrl, existingCategoryNames, tocText || null);
 
         results.push({
           videoUrl,

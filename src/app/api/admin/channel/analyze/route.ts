@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { verifyAdmin } from '@/lib/admin-auth';
 import { extractTranscript } from '@/lib/transcript';
 import { analyzeTranscript } from '@/lib/analyzer';
+import { fetchVideoDescription, parseTimestamps, formatTimestampsForAnalysis } from '@/lib/video-description';
 
 interface VideoAnalysisResult {
   videoUrl: string;
@@ -42,9 +43,14 @@ export async function POST(request: NextRequest) {
         // Extract transcript
         const transcript = await extractTranscript(video.url);
 
-        // Analyze with Claude, passing existing category names
+        // Fetch video description and parse timestamps
+        const description = await fetchVideoDescription(video.url);
+        const timestamps = description ? parseTimestamps(description) : [];
+        const tocText = formatTimestampsForAnalysis(timestamps);
+
+        // Analyze with Claude, passing existing category names + description
         const existingCategoryNames = Array.from(categoryMap.keys());
-        const analysis = await analyzeTranscript(transcript, video.url, existingCategoryNames);
+        const analysis = await analyzeTranscript(transcript, video.url, existingCategoryNames, tocText || null);
 
         // Update video title if we got a better one
         if (analysis.videoTitle) {
