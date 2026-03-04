@@ -1,13 +1,25 @@
 import { fetchTranscript, TranscriptResponse } from 'youtube-transcript-plus';
 
 export async function extractTranscript(videoUrl: string): Promise<string> {
-  try {
-    const segments: TranscriptResponse[] = await fetchTranscript(videoUrl);
-    return segments.map((s) => s.text).join(' ');
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`자막을 찾을 수 없습니다: ${message}`);
+  // Try Korean first, then auto-generated Korean, then any available language
+  const langAttempts = ['ko', 'ko-auto', undefined];
+
+  for (const lang of langAttempts) {
+    try {
+      const segments: TranscriptResponse[] = await fetchTranscript(videoUrl, {
+        lang,
+      });
+      if (segments.length > 0) {
+        return segments.map((s) => s.text).join(' ');
+      }
+    } catch {
+      // Try next language
+    }
   }
+
+  throw new Error(
+    `자막을 찾을 수 없습니다: 사용 가능한 자막이 없습니다 (${videoUrl})`,
+  );
 }
 
 export function extractVideoId(url: string): string | null {
